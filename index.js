@@ -65,7 +65,7 @@ async function handleEvent(event) {
     }
 
     // 1. First, forward the message (Priority)
-    const forwardMessage = `收到來自 ${senderName} 的訊息：\n\n${originalMessage}`;
+    const forwardMessage = `來自 ${senderName} 的訊息：\n${originalMessage}`;
 
     // We push the message first
     const pushPromise = client.pushMessage(targetUserId, {
