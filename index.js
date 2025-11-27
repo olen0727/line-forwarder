@@ -1,3 +1,5 @@
+// line-forwarder 版本A
+
 const express = require('express');
 const line = require('@line/bot-sdk');
 const { createClient } = require('@supabase/supabase-js');
