@@ -1,4 +1,4 @@
-// line-forwarder 版本A
+// line-forwarder 版本 A
 
 const express = require('express');
 const line = require('@line/bot-sdk');
@@ -26,7 +26,7 @@ app.get('/', (req, res) => {
 });
 
 
-// Webhook route
+// Webhook 路由設定，用來接收 LINE 事件
 app.post('/callback', line.middleware(config), (req, res) => {
     Promise.all(req.body.events.map(handleEvent))
         .then((result) => res.json(result))
@@ -36,10 +36,10 @@ app.post('/callback', line.middleware(config), (req, res) => {
         });
 });
 
-// Event handler
+// 處理事件的函式，邏輯都在這裡
 async function handleEvent(event) {
     if (event.type !== 'message' || event.message.type !== 'text') {
-        // ignore non-text-message event
+        // 如果不是文字訊息，直接忽略不處理
         return Promise.resolve(null);
     }
 
@@ -54,7 +54,7 @@ async function handleEvent(event) {
         });
     }
 
-    // 1. Get all active subscribers from Supabase
+    // 從 Supabase 取得所有啟用的訂閱者
     const { data: subscribers, error: subError } = await supabase
         .from('subscribers')
         .select('user_id')
@@ -67,10 +67,10 @@ async function handleEvent(event) {
 
     const targetIds = subscribers.map(s => s.user_id);
 
-    // Forward the message to the target user
-    // We include the sender's ID (or we could fetch profile) to know who sent it
+    // 將訊息轉發給目標使用者
+    // 包含發送者的 ID（或之後抓取個人資料），以便識別發送者
 
-    // Try to get user profile to show name
+    // 試著取得使用者個人資料，以顯示名字
     let senderName = 'Unknown User';
     try {
         const profile = await client.getProfile(senderId);
@@ -79,10 +79,10 @@ async function handleEvent(event) {
         console.log('Could not get profile:', e);
     }
 
-    // 1. First, forward the message (Priority)
+    // 首先，優先轉發訊息
     const forwardMessage = `收到來自 ${senderName} 的訊息：\n\n${originalMessage}`;
 
-    // Use multicast to send to multiple users
+    // 使用 multicast 一次發送給多個使用者
     const pushPromise = client.multicast(targetIds, {
         type: 'text',
         text: forwardMessage
@@ -90,7 +90,7 @@ async function handleEvent(event) {
         console.error('Error forwarding message:', err);
     });
 
-    // 2. Then, store in Supabase (Background)
+    // 在背景將訊息存入 Supabase
     const dbPromise = supabase
         .from('messages')
         .insert({
@@ -105,7 +105,7 @@ async function handleEvent(event) {
             console.error('Supabase exception:', err);
         });
 
-    // Wait for both
+    // 等待兩個動作都完成
     await Promise.all([pushPromise, dbPromise]);
 }
 
@@ -113,13 +113,13 @@ const port = process.env.PORT || 3000;
 const server = app.listen(port, async () => {
     console.log(`listening on ${port}`);
 
-    // 如果是在本地開發環境 (沒有設定 PORT 環境變數通常代表本地)，自動啟動 ngrok
+    // 如果在本地開發環境（通常沒設定 PORT 環境變數），自動啟動 ngrok
     if (!process.env.PORT || process.env.NODE_ENV !== 'production') {
         try {
             const ngrok = require('ngrok');
             const url = await ngrok.connect({
                 addr: port,
-                // 如果您有 ngrok authtoken，可以在這裡設定，或是在系統環境變數設定
+                // 如果有 ngrok authtoken，可以在這裡設定，或是直接讀取系統環境變數
                 // authtoken: process.env.NGROK_AUTHTOKEN, 
             });
             console.log(`\n===================================================`);
