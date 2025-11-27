@@ -43,17 +43,32 @@ async function handleEvent(event) {
         return Promise.resolve(null);
     }
 
-    const targetUserId = process.env.TARGET_USER_ID;
+    const originalMessage = event.message.text;
+    const senderId = event.source.userId;
 
-    if (!targetUserId) {
-        console.error('TARGET_USER_ID is not set in .env');
+    // === 新增功能：查詢 ID 指令 ===
+    if (originalMessage.toLowerCase() === 'myid' || originalMessage === '查ID') {
+        return client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: `您的 User ID 是：\n${senderId}`
+        });
+    }
+
+    // 1. Get all active subscribers from Supabase
+    const { data: subscribers, error: subError } = await supabase
+        .from('subscribers')
+        .select('user_id')
+        .eq('is_active', true);
+
+    if (subError || !subscribers || subscribers.length === 0) {
+        console.error('No active subscribers found or error fetching:', subError);
         return Promise.resolve(null);
     }
 
+    const targetIds = subscribers.map(s => s.user_id);
+
     // Forward the message to the target user
     // We include the sender's ID (or we could fetch profile) to know who sent it
-    const originalMessage = event.message.text;
-    const senderId = event.source.userId;
 
     // Try to get user profile to show name
     let senderName = 'Unknown User';
@@ -65,10 +80,10 @@ async function handleEvent(event) {
     }
 
     // 1. First, forward the message (Priority)
-    const forwardMessage = `來自 ${senderName} 的訊息：\n${originalMessage}`;
+    const forwardMessage = `收到來自 ${senderName} 的訊息：\n\n${originalMessage}`;
 
-    // We push the message first
-    const pushPromise = client.pushMessage(targetUserId, {
+    // Use multicast to send to multiple users
+    const pushPromise = client.multicast(targetIds, {
         type: 'text',
         text: forwardMessage
     }).catch(err => {
@@ -90,7 +105,7 @@ async function handleEvent(event) {
             console.error('Supabase exception:', err);
         });
 
-    // Wait for both (or at least ensure forwarding started)
+    // Wait for both
     await Promise.all([pushPromise, dbPromise]);
 }
 
