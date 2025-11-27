@@ -95,9 +95,29 @@ async function handleEvent(event) {
 }
 
 const port = process.env.PORT || 3000;
-const server = app.listen(port, () => {
+const server = app.listen(port, async () => {
     console.log(`listening on ${port}`);
+
+    // 如果是在本地開發環境 (沒有設定 PORT 環境變數通常代表本地)，自動啟動 ngrok
+    if (!process.env.PORT || process.env.NODE_ENV !== 'production') {
+        try {
+            const ngrok = require('ngrok');
+            const url = await ngrok.connect({
+                addr: port,
+                // 如果您有 ngrok authtoken，可以在這裡設定，或是在系統環境變數設定
+                // authtoken: process.env.NGROK_AUTHTOKEN, 
+            });
+            console.log(`\n===================================================`);
+            console.log(`🚀 Ngrok Tunnel Created!`);
+            console.log(`🌍 Webhook URL: ${url}/callback`);
+            console.log(`===================================================\n`);
+        } catch (error) {
+            console.error('Error starting ngrok:', error);
+        }
+    }
 });
+
+module.exports = app;
 
 process.on('SIGTERM', () => {
     console.log('SIGTERM signal received: closing HTTP server');
