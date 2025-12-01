@@ -59,6 +59,28 @@ async function handleEvent(event) {
         });
     }
 
+    // === 測試功能：模擬使用者訊息 ===
+    if (originalMessage.toLowerCase() === 'test' || originalMessage === '測試') {
+        const mockEvent = {
+            replyToken: 'mock_token',
+            type: 'message',
+            mode: 'active',
+            timestamp: Date.now(),
+            source: {
+                type: 'user',
+                userId: 'mock_user_999' // 虛擬使用者 ID
+            },
+            message: {
+                id: 'mock_msg_id',
+                type: 'text',
+                text: '這是一則測試訊息 (來自虛擬使用者)'
+            }
+        };
+        // 遞迴呼叫 handleEvent 來處理這個虛擬事件
+        return handleEvent(mockEvent);
+    }
+
+
     // 從 Supabase 取得所有啟用的訂閱者 (管理員)
     const { data: subscribers, error: subError } = await supabase
         .from('subscribers')
@@ -74,6 +96,46 @@ async function handleEvent(event) {
     const adminSender = subscribers.find(sub => sub.user_id === senderId);
 
     if (adminSender) {
+        // === 管理員指令區 ===
+
+        // 指令：查詢目前鎖定目標
+        const msg = originalMessage.toLowerCase();
+        if (msg === 'target' || msg === 'ta' || msg === '查詢目標') {
+            const targetId = adminSender.active_chat_target;
+            if (targetId) {
+                return client.replyMessage(event.replyToken, {
+                    type: 'text',
+                    text: `🔒 目前鎖定對象 ID：\n${targetId}`
+                });
+            } else {
+                return client.replyMessage(event.replyToken, {
+                    type: 'text',
+                    text: '🔓 目前沒有鎖定任何對象。'
+                });
+            }
+        }
+
+        // 指令：解除鎖定
+        if (msg === 'clear' || msg === 'clr' || msg === '解除鎖定') {
+            const { error } = await supabase
+                .from('subscribers')
+                .update({ active_chat_target: null })
+                .eq('user_id', senderId);
+
+            if (error) {
+                console.error('Error clearing target:', error);
+                return client.replyMessage(event.replyToken, {
+                    type: 'text',
+                    text: '❌ 解除失敗，系統錯誤。'
+                });
+            }
+
+            return client.replyMessage(event.replyToken, {
+                type: 'text',
+                text: '🔓 已解除鎖定，現在您可以自由輸入指令。'
+            });
+        }
+
         // === 管理員發送訊息 ===
         const targetUserId = adminSender.active_chat_target;
 
