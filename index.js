@@ -1,4 +1,4 @@
-// line-forwarder 版本 A
+// line-forwarder 版本 A (Restored & Enhanced)
 
 const express = require('express');
 const line = require('@line/bot-sdk');
@@ -80,7 +80,6 @@ async function handleEvent(event) {
         return handleEvent(mockEvent);
     }
 
-
     // 從 Supabase 取得所有啟用的訂閱者 (管理員)
     const { data: subscribers, error: subError } = await supabase
         .from('subscribers')
@@ -93,131 +92,222 @@ async function handleEvent(event) {
     }
 
     // 檢查發送者是否為管理員
-                .from('subscribers')
-        .update({ active_chat_target: null })
-        .eq('user_id', senderId);
+    const adminSender = subscribers.find(sub => sub.user_id === senderId);
 
-    if (error) {
-        console.error('Error clearing target:', error);
-        return client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: '❌ 解除失敗，系統錯誤。'
-        });
-    }
+    if (adminSender) {
+        // === 管理員指令區 ===
+        const msg = originalMessage.toLowerCase();
 
-    return client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: '🔓 已解除鎖定，現在您可以自由輸入指令。'
-    });
-}
+        // 指令：查詢目前鎖定目標
+        if (msg === 'target' || msg === 'ta' || msg === '查詢目標') {
+            const targetId = adminSender.active_chat_target;
+            if (targetId) {
+                try {
+                    // 嘗試取得使用者個人資料
+                    const profile = await client.getProfile(targetId);
 
-// === 管理員發送訊息 ===
-const targetUserId = adminSender.active_chat_target;
-
-if (!targetUserId) {
-    return client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: '⚠️ 您尚未鎖定回覆對象。\n請先點擊使用者訊息下方的「回覆此人」按鈕。'
-    });
-}
-
-// 轉發訊息給目標使用者
-return client.pushMessage(targetUserId, {
-    type: 'text',
-    text: originalMessage
-}).then(() => {
-    // 為了不干擾管理員，這裡可以選擇不回覆，或者回覆一個簡單的確認
-    // 這裡選擇不回覆，讓對話看起來像直接聊天
-    return Promise.resolve(null);
-}).catch(err => {
-    console.error('Error forwarding to user:', err);
-    return client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: '❌ 傳送失敗，該使用者可能已封鎖機器人。'
-    });
-});
-
-    } else {
-    // === 一般使用者發送訊息 ===
-
-    // 1. 試著取得使用者個人資料
-    let senderName = 'Unknown User';
-    try {
-        const profile = await client.getProfile(senderId);
-        senderName = profile.displayName;
-    } catch (e) {
-        console.log('Could not get profile:', e);
-    }
-
-    // 2. 準備 Flex Message 給管理員
-    const flexMessage = {
-        type: 'flex',
-        altText: `收到來自 ${senderName} 的訊息`,
-        contents: {
-            type: 'bubble',
-            body: {
-                type: 'box',
-                layout: 'vertical',
-                contents: [
-                    {
-                        type: 'text',
-                        text: `📩 來自: ${senderName}`,
-                        weight: 'bold',
-                        size: 'md',
-                        color: '#1DB446'
-                    },
-                    {
-                        type: 'separator',
-                        margin: 'md'
-                    },
-                    {
-                        type: 'text',
-                        text: originalMessage,
-                        wrap: true,
-                        margin: 'md',
-                        size: 'sm'
-                    }
-                ]
-            },
-            footer: {
-                type: 'box',
-                layout: 'vertical',
-                contents: [
-                    {
-                        type: 'button',
-                        style: 'primary',
-                        color: '#000000',
-                        action: {
-                            type: 'postback',
-                            label: '回覆此人',
-                            data: `action=set_target&user_id=${senderId}&user_name=${senderName}`,
-                            displayText: `我要回覆 ${senderName}`
+                    // 回覆 Flex Message 顯示詳細資料
+                    return client.replyMessage(event.replyToken, {
+                        type: 'flex',
+                        altText: `目前鎖定：${profile.displayName}`,
+                        contents: {
+                            type: 'bubble',
+                            hero: {
+                                type: 'image',
+                                url: profile.pictureUrl || 'https://via.placeholder.com/150?text=No+Image', // 預設圖片
+                                size: 'full',
+                                aspectRatio: '20:13',
+                                aspectMode: 'cover'
+                            },
+                            body: {
+                                type: 'box',
+                                layout: 'vertical',
+                                contents: [
+                                    {
+                                        type: 'text',
+                                        text: '🔒 目前鎖定對象',
+                                        weight: 'bold',
+                                        color: '#1DB446',
+                                        size: 'sm'
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: profile.displayName,
+                                        weight: 'bold',
+                                        size: 'xl',
+                                        margin: 'md'
+                                    },
+                                    {
+                                        type: 'text',
+                                        text: targetId,
+                                        size: 'xs',
+                                        color: '#aaaaaa',
+                                        wrap: true,
+                                        margin: 'sm'
+                                    }
+                                ]
+                            },
+                            footer: {
+                                type: 'box',
+                                layout: 'vertical',
+                                contents: [
+                                    {
+                                        type: 'button',
+                                        action: {
+                                            type: 'message',
+                                            label: '解除鎖定',
+                                            text: 'clr'
+                                        },
+                                        style: 'secondary'
+                                    }
+                                ]
+                            }
                         }
-                    }
-                ]
+                    });
+                } catch (error) {
+                    console.error('Error getting profile:', error);
+                    // 如果取得失敗 (例如對方封鎖)，回退到只顯示 ID
+                    return client.replyMessage(event.replyToken, {
+                        type: 'text',
+                        text: `🔒 目前鎖定對象 ID (無法取得詳細資料)：\n${targetId}`
+                    });
+                }
+            } else {
+                return client.replyMessage(event.replyToken, {
+                    type: 'text',
+                    text: '🔓 目前沒有鎖定任何對象。'
+                });
             }
         }
-    };
 
-    // 3. 轉發給所有管理員
-    const targetIds = subscribers.map(s => s.user_id);
-    const pushPromise = client.multicast(targetIds, flexMessage)
-        .catch(err => console.error('Error forwarding message:', err));
+        // 指令：解除鎖定
+        if (msg === 'clear' || msg === 'clr' || msg === '解除鎖定') {
+            const { error } = await supabase
+                .from('subscribers')
+                .update({ active_chat_target: null })
+                .eq('user_id', senderId);
 
-    // 4. 儲存訊息到 Supabase
-    const dbPromise = supabase
-        .from('messages')
-        .insert({
-            user_id: senderId,
-            user_name: senderName,
-            content: originalMessage
-        })
-        .then(({ error }) => {
-            if (error) console.error('Error storing message in Supabase:', error);
+            if (error) {
+                console.error('Error clearing target:', error);
+                return client.replyMessage(event.replyToken, {
+                    type: 'text',
+                    text: '❌ 解除失敗，系統錯誤。'
+                });
+            }
+
+            return client.replyMessage(event.replyToken, {
+                type: 'text',
+                text: '🔓 已解除鎖定，現在您可以自由輸入指令。'
+            });
+        }
+
+        // === 管理員發送訊息 ===
+        const targetUserId = adminSender.active_chat_target;
+
+        if (!targetUserId) {
+            return client.replyMessage(event.replyToken, {
+                type: 'text',
+                text: '⚠️ 您尚未鎖定回覆對象。\n請先點擊使用者訊息下方的「回覆此人」按鈕。'
+            });
+        }
+
+        // 轉發訊息給目標使用者
+        return client.pushMessage(targetUserId, {
+            type: 'text',
+            text: originalMessage
+        }).then(() => {
+            // 為了不干擾管理員，這裡可以選擇不回覆，或者回覆一個簡單的確認
+            // 這裡選擇不回覆，讓對話看起來像直接聊天
+            return Promise.resolve(null);
+        }).catch(err => {
+            console.error('Error forwarding to user:', err);
+            return client.replyMessage(event.replyToken, {
+                type: 'text',
+                text: '❌ 傳送失敗，該使用者可能已封鎖機器人。'
+            });
         });
 
-    await Promise.all([pushPromise, dbPromise]);
-}
+    } else {
+        // === 一般使用者發送訊息 ===
+
+        // 1. 試著取得使用者個人資料
+        let senderName = 'Unknown User';
+        try {
+            const profile = await client.getProfile(senderId);
+            senderName = profile.displayName;
+        } catch (e) {
+            console.log('Could not get profile:', e);
+        }
+
+        // 2. 準備 Flex Message 給管理員
+        const flexMessage = {
+            type: 'flex',
+            altText: `收到來自 ${senderName} 的訊息`,
+            contents: {
+                type: 'bubble',
+                body: {
+                    type: 'box',
+                    layout: 'vertical',
+                    contents: [
+                        {
+                            type: 'text',
+                            text: `📩 來自: ${senderName}`,
+                            weight: 'bold',
+                            size: 'md',
+                            color: '#1DB446'
+                        },
+                        {
+                            type: 'separator',
+                            margin: 'md'
+                        },
+                        {
+                            type: 'text',
+                            text: originalMessage,
+                            wrap: true,
+                            margin: 'md',
+                            size: 'sm'
+                        }
+                    ]
+                },
+                footer: {
+                    type: 'box',
+                    layout: 'vertical',
+                    contents: [
+                        {
+                            type: 'button',
+                            style: 'primary',
+                            color: '#000000',
+                            action: {
+                                type: 'postback',
+                                label: '回覆此人',
+                                data: `action=set_target&user_id=${senderId}&user_name=${senderName}`,
+                                displayText: `我要回覆 ${senderName}`
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+
+        // 3. 轉發給所有管理員
+        const targetIds = subscribers.map(s => s.user_id);
+        const pushPromise = client.multicast(targetIds, flexMessage)
+            .catch(err => console.error('Error forwarding message:', err));
+
+        // 4. 儲存訊息到 Supabase
+        const dbPromise = supabase
+            .from('messages')
+            .insert({
+                user_id: senderId,
+                user_name: senderName,
+                content: originalMessage
+            })
+            .then(({ error }) => {
+                if (error) console.error('Error storing message in Supabase:', error);
+            });
+
+        await Promise.all([pushPromise, dbPromise]);
+    }
 }
 
 // 處理 Postback 事件
